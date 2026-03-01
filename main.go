@@ -285,6 +285,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 func downloadM3U8WithFFmpeg(task *DownloadTask) {
+	log.Printf("[%s] 开始 M3U8 转码下载: %s", task.ID, task.URL)
 	updateTaskStatus(task.ID, "transcoding", "")
 	filePath := filepath.Join(downloadDir, task.Filename)
 
@@ -340,6 +341,10 @@ func downloadM3U8WithFFmpeg(task *DownloadTask) {
 				t.Downloaded = sizeKB * 1024
 				t.Progress = timeStr
 				t.Speed = speedStr
+				// Optional: Log to terminal every few seconds to avoid floods
+				if strings.HasSuffix(timeStr, "0") || strings.HasSuffix(timeStr, "5") {
+					log.Printf("[%s] Transcoding Progress: Time=%s, Size=%dKB, Speed=%s", task.ID, timeStr, sizeKB, speedStr)
+				}
 			}
 			taskMutex.Unlock()
 		}
@@ -352,9 +357,11 @@ func downloadM3U8WithFFmpeg(task *DownloadTask) {
 	}
 
 	updateTaskStatus(task.ID, "completed", "")
+	log.Printf("[%s] M3U8 转码下载成功: %s", task.ID, task.Filename)
 }
 
 func downloadFile(task *DownloadTask) {
+	log.Printf("[%s] 开始文件下载: %s", task.ID, task.URL)
 	filePath := filepath.Join(downloadDir, task.Filename)
 	out, err := os.Create(filePath)
 	if err != nil {
@@ -410,6 +417,7 @@ func downloadFile(task *DownloadTask) {
 	}
 
 	updateTaskStatus(task.ID, "completed", "")
+	log.Printf("[%s] 文件下载完成: %s", task.ID, task.Filename)
 }
 
 func updateTaskStatus(id, status, errStr string) {
