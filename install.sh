@@ -58,10 +58,10 @@ install_app() {
     mkdir -p ${APP_DIR}
     mkdir -p ${APP_DIR}/downloads
     
-    curl -L -o ${APP_DIR}/${BINARY_NAME} ${DOWNLOAD_URL}
+    curl -L -f -o ${APP_DIR}/${BINARY_NAME} ${DOWNLOAD_URL}
     
-    if [ ! -s "${APP_DIR}/${BINARY_NAME}" ] || grep -q "Not Found" "${APP_DIR}/${BINARY_NAME}"; then
-        echo -e "${CRED}错误: 下载失败。未能从 GitHub 获取二进制文件。${CEND}"
+    if [ ! -s "${APP_DIR}/${BINARY_NAME}" ]; then
+        echo -e "${CRED}错误: 下载失败。未能从 GitHub 获取二进制文件 (文件为空或请求超) 。${CEND}"
         rm -f ${APP_DIR}/${BINARY_NAME}
         exit 1
     fi
