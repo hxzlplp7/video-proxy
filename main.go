@@ -41,6 +41,7 @@ func init() {
 
 func main() {
 	http.HandleFunc("/", handleIndex)
+	http.HandleFunc("/player", handlePlayer)
 	http.HandleFunc("/proxy", handleProxy)
 	http.HandleFunc("/download", handleDownload)
 	http.HandleFunc("/status", handleStatus)
@@ -63,6 +64,18 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(indexHTML))
+}
+
+func handlePlayer(w http.ResponseWriter, r *http.Request) {
+	urlParam := r.URL.Query().Get("url")
+	if urlParam == "" {
+		http.Error(w, "missing 'url' parameter", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Cleanly escape the URL for embedding in HTML string
+	safeURL := strings.ReplaceAll(urlParam, "'", "\\'")
+	w.Write([]byte(fmt.Sprintf(playerHTML, safeURL)))
 }
 
 func handleProxy(w http.ResponseWriter, r *http.Request) {
@@ -458,8 +471,8 @@ const indexHTML = `<!DOCTYPE html>
         function proxyPlay() {
             const url = getUrl();
             if (!url) return printLog('错误：请先输入有效的视频 URL', 'error');
-            printLog('正在打开代理流播放器...');
-            window.open('/proxy?url=' + encodeURIComponent(url), '_blank');
+            printLog('正在打开 Web 播放器...');
+            window.open('/player?url=' + encodeURIComponent(url), '_blank');
         }
 
         async function startDownload() {
@@ -483,9 +496,95 @@ const indexHTML = `<!DOCTYPE html>
                 } else {
                     printLog('请求被拒绝: ' + (data?.error || text || "未知后端错误"), 'error');
                 }
-            } catch (err) {
                 printLog('致命错误: ' + err.message, 'error');
             }
+        }
+    </script>
+</body>
+</html>`
+
+const playerHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Proxy Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: white;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        #video-container {
+            width: 100%%;
+            height: 100vh;
+            max-width: 100vw;
+            background: #000;
+        }
+        video {
+            width: 100%%;
+            height: 100%%;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="video-container">
+        <video id="video" controls autoplay crossorigin="anonymous"></video>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const sourceUrl = '/proxy?url=' + encodeURIComponent('%s');
+
+        if (sourceUrl.includes('.m3u8') || sourceUrl.includes('.m3u')) {
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    debug: false,
+                    enableWorker: true
+                });
+                hls.loadSource(sourceUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.play().catch(e => console.log("Auto-play prevented", e));
+                });
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        switch(data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.error("网络错误");
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.error("媒体错误");
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                break;
+                        }
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // For Safari
+                video.src = sourceUrl;
+                video.addEventListener('loadedmetadata', function() {
+                    video.play().catch(e => console.log("Auto-play prevented", e));
+                });
+            } else {
+                alert('您的浏览器不支持 HLS 播放。请使用 Safari 或现代桌面浏览器。');
+            }
+        } else {
+            // Standard MP4 File
+            video.src = sourceUrl;
+            video.play().catch(e => console.log("Auto-play prevented", e));
         }
     </script>
 </body>
