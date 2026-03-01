@@ -64,6 +64,9 @@ install_app() {
     mkdir -p ${APP_DIR}
     mkdir -p ${APP_DIR}/downloads
     
+    # 强制删除旧文件，防止 Text file busy
+    rm -f ${APP_DIR}/${BINARY_NAME}
+    
     curl -L -f -o ${APP_DIR}/${BINARY_NAME} ${DOWNLOAD_URL}
     
     if [ ! -s "${APP_DIR}/${BINARY_NAME}" ]; then
@@ -74,9 +77,18 @@ install_app() {
     
     chmod +x ${APP_DIR}/${BINARY_NAME}
 
-    # Ask for port
-    read -p "请输入要监听的端口 [默认 8000]: " PORT
-    PORT=${PORT:-8000}
+    # Ask for port (handle piped bash execution)
+    PORT=8000
+    if [ -c /dev/tty ]; then
+        read -p "请输入要监听的端口 [默认 8000]: " PORT_INPUT </dev/tty
+    else
+        read -p "请输入要监听的端口 [默认 8000]: " PORT_INPUT
+    fi
+    PORT=${PORT_INPUT:-8000}
+    # Validate it's a number
+    if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+        PORT=8000
+    fi
 
     # Create Systemd service
     cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
@@ -97,8 +109,9 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 EOF
 
-    # Create command shortcut
-    cp "$0" /usr/local/bin/video-proxy
+    # Create command shortcut (Download remote script since $0 is a pipe desc here)
+    echo -e "${CYELLOW}正在生成全局管理菜单命令...${CEND}"
+    curl -fsSL "${PROXY_PREFIX}https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh" -o /usr/local/bin/video-proxy
     chmod +x /usr/local/bin/video-proxy
 
     # Reload systemd and start service
@@ -154,7 +167,7 @@ case "$num" in
         echo -e "${CGREEN}=> 服务已重启!${CEND}"
         ;;
     4)
-        journalctl -u ${SERVICE_NAME} -f
+        journalctl -u ${SERVICE_NAME} -n 50 -f
         ;;
     0)
         exit 0
