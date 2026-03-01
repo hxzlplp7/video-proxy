@@ -14,21 +14,37 @@
 国内 VPS 无法直接访问 GitHub，需要让 `curl` 拉脚本和脚本内下载都走代理：
 
 **方式一：一键极速命令 (推荐)**
+可以尝试以下几个不同的代理节点（哪个能连上用哪个）：
+
+*节点 1 (kkgithub):*
+
+```bash
+GH_PROXY="https://kkgithub.com/" bash <(curl -fsSL https://raw.kkgithub.com/hxzlplp7/video-proxy/main/install.sh)
+```
+
+*节点 2 (gh-proxy.com):*
+
+```bash
+GH_PROXY="https://mirror.ghproxy.com/" bash <(curl -fsSL https://mirror.ghproxy.com/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh)
+```
+
+*节点 3 (ghfast):*
 
 ```bash
 GH_PROXY="https://ghfast.top/" bash <(curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh)
 ```
 
 **方式二：先下载脚本再运行**
+如果上面的一键命令卡住，可以尝试手动分布执行：
 
 ```bash
-curl -fsSL https://ghfast.top/https/raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh -o install.sh
+# 下载脚本 (如果超时，把 ghfast.top 换成 kkgithub.com 或 mirror.ghproxy.com)
+curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh -o install.sh
 chmod +x install.sh
 GH_PROXY="https://ghfast.top/" ./install.sh
 ```
 
-> 💡 **说明:** `GH_PROXY` 变量让脚本内拉取 GitHub 的核心二进制文件时全自动走代理；`curl` 命令本身也需要用代理 URL 拉取脚本，以防止超时。
-> 你可以将 `https://ghfast.top/` 替换为其他可用的 GitHub 代理（如 `https://mirror.ghproxy.com/` 等）。
+> 💡 **说明:** 国内不同地区对不同 GitHub 代理的解析速度不一样，如果出现 `Connection timed out`，直接换**节点 1、节点 2 或节点 3** 的命令再试即可。
 
 ### 🌐 海外 VPS 部署
 
