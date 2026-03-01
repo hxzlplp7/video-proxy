@@ -108,7 +108,7 @@ install_app() {
     # 强制删除旧文件，防止 Text file busy
     rm -f ${APP_DIR}/${BINARY_NAME}
     
-    curl -L -f -o ${APP_DIR}/${BINARY_NAME} ${DOWNLOAD_URL}
+    curl -L --connect-timeout 15 -f -o ${APP_DIR}/${BINARY_NAME} ${DOWNLOAD_URL}
     
     if [ ! -s "${APP_DIR}/${BINARY_NAME}" ]; then
         echo -e "${CRED}错误: 下载失败。未能从 GitHub 获取二进制文件 (文件为空或请求超) 。${CEND}"
@@ -150,10 +150,16 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 EOF
 
-    # Create command shortcut (Download remote script since $0 is a pipe desc here)
+    # Create command shortcut
     echo -e "${CYELLOW}正在生成全局管理菜单命令...${CEND}"
-    curl -fsSL "${PROXY_PREFIX}https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh" -o /usr/local/bin/video-proxy
-    chmod +x /usr/local/bin/video-proxy
+    if [ -f "$0" ] && [[ "$0" == *"install.sh" ]]; then
+        # If running from local file
+        cp "$0" /usr/local/bin/video-proxy
+    else
+        # If piped, try download with timeout
+        curl -fsSL --connect-timeout 10 "${PROXY_PREFIX}https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh" -o /usr/local/bin/video-proxy || echo -e "${CYELLOW}警告: 快捷菜单下载失败，您可以稍后手动设置。${CEND}"
+    fi
+    chmod +x /usr/local/bin/video-proxy 2>/dev/null
 
     # Reload systemd and start service
     systemctl daemon-reload
