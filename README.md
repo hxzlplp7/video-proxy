@@ -16,19 +16,19 @@
 **方式一：一键极速命令 (推荐)**
 
 ```bash
-GH_PROXY="https://ghproxy.cn/" bash <(curl -fsSL https://ghproxy.cn/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh)
+GH_PROXY="https://ghfast.top/" bash <(curl -fsSL https://ghfast.top/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh)
 ```
 
 **方式二：先下载脚本再运行**
 
 ```bash
-curl -fsSL https://ghproxy.cn/https/raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh -o install.sh
+curl -fsSL https://ghfast.top/https/raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh -o install.sh
 chmod +x install.sh
-GH_PROXY="https://ghproxy.cn/" ./install.sh
+GH_PROXY="https://ghfast.top/" ./install.sh
 ```
 
 > 💡 **说明:** `GH_PROXY` 变量让脚本内拉取 GitHub 的核心二进制文件时全自动走代理；`curl` 命令本身也需要用代理 URL 拉取脚本，以防止超时。
-> 你可以将 `https://ghproxy.cn/` 替换为其他可用的 GitHub 代理（如 `https://mirror.ghproxy.com/`, `https://ghfast.top/` 等）。
+> 你可以将 `https://ghfast.top/` 替换为其他可用的 GitHub 代理（如 `https://mirror.ghproxy.com/` 等）。
 
 ### 🌐 海外 VPS 部署
 
