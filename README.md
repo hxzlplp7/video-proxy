@@ -9,17 +9,37 @@
 
 ## 一、服务器端安装步骤 (Linux)
 
-### 方法 1：使用一键脚本安装 (强烈推荐)
+### 🇨🇳 国内 VPS 部署 (推荐)
 
-如果你希望该程序能在服务器**开机自启**并在后台稳定运行，我们提供了一个可以自动侦测架构并下载对应二进制程序的网络一键脚本。
+国内 VPS 无法直接访问 GitHub，需要让 `curl` 拉脚本和脚本内下载都走代理：
 
-在任何可上网的 Linux 服务器终端上执行：
+**方式一：一键极速命令 (推荐)**
 
 ```bash
-curl -L -o install.sh https://ghproxy.cn/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh && sudo bash install.sh
+GH_PROXY="https://ghproxy.cn/" bash <(curl -fsSL https://ghproxy.cn/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh)
 ```
 
-在弹出的菜单中输入 `1` 进行安装。安装后它将自动作为 Systemd 服务运行在默认的 `8000` 端口。
+**方式二：先下载脚本再运行**
+
+```bash
+curl -fsSL https://ghproxy.cn/https/raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh -o install.sh
+chmod +x install.sh
+GH_PROXY="https://ghproxy.cn/" ./install.sh
+```
+
+> 💡 **说明:** `GH_PROXY` 变量让脚本内拉取 GitHub 的核心二进制文件时全自动走代理；`curl` 命令本身也需要用代理 URL 拉取脚本，以防止超时。
+> 你可以将 `https://ghproxy.cn/` 替换为其他可用的 GitHub 代理（如 `https://mirror.ghproxy.com/`, `https://ghfast.top/` 等）。
+
+### 🌐 海外 VPS 部署
+
+海外服务器直接执行即可：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh)
+```
+
+---
+安装期间，在弹出的菜单中输入 `1` 进行安装。安装后它将自动作为 Systemd 服务运行在默认的 `8000` 端口。
 
 ### 方法 2：手动运行 (二次开发或特定环境)
 
