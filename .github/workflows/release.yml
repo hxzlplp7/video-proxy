@@ -1,0 +1,44 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build_and_release:
+    name: Build Go Binary
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          
+      - name: Build for Linux (amd64)
+        run: |
+          GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o proxy-server-linux-amd64
+          
+      - name: Build for Windows (amd64)
+        run: |
+          GOOS=windows GOARCH=amd64 go build -ldflags="-w -s" -o proxy-server-windows-amd64.exe
+          
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            proxy-server-linux-amd64
+            proxy-server-windows-amd64.exe
+            install.sh
+            README.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
