@@ -22,7 +22,14 @@ check_root() {
 }
 
 install_app() {
-    echo -e "${CBLUE}=> 正在安装 Video Proxy Server...${CEND}"
+    echo -e "${CBLUE}=> 正在安装/更新 Video Proxy Server...${CEND}"
+    
+    # Stop existing service if any
+    if systemctl is-active --quiet ${SERVICE_NAME}; then
+        echo -e "${CYELLOW}检测到旧服务正在运行，正在停止...${CEND}"
+        systemctl stop ${SERVICE_NAME}
+    fi
+    killall -9 ${BINARY_NAME} 2>/dev/null
     
     # Check architecture
     ARCH=$(uname -m)
