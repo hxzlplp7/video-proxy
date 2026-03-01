@@ -39,6 +39,7 @@ func init() {
 }
 
 func main() {
+	http.HandleFunc("/", handleIndex)
 	http.HandleFunc("/proxy", handleProxy)
 	http.HandleFunc("/download", handleDownload)
 	http.HandleFunc("/status", handleStatus)
@@ -52,6 +53,15 @@ func main() {
 
 	log.Printf("Starting Video Proxy Server on :%s\n", *port)
 	log.Fatal(http.ListenAndServe(":"+*port, nil))
+}
+
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(indexHTML))
 }
 
 func handleProxy(w http.ResponseWriter, r *http.Request) {
@@ -299,3 +309,147 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"id": "%s", "status": "%s", "downloaded_bytes": %d, "filename": "%s"}`, task.ID, task.Status, task.Downloaded, task.Filename)
 	}
 }
+
+const indexHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Proxy Server - Web Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #ffffff;
+            font-family: 'Inter', system-ui, sans-serif;
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .shimmer {
+            background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 100%);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite linear;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+    <div class="glass max-w-2xl w-full rounded-3xl shadow-2xl p-8 sm:p-10 transition-all duration-300">
+        <div class="text-center mb-10">
+            <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight mb-3 text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-cyan-300">
+                 Video Proxy
+            </h1>
+            <p class="text-blue-100 text-sm sm:text-base font-light opacity-90">
+                无缝穿透防盗链，云端高速下载与流媒体代理
+            </p>
+        </div>
+
+        <div class="space-y-6">
+            <div class="relative group">
+                <input type="text" id="videoUrl" placeholder="输入视频的 M3U8 / MP4 链接..." 
+                    class="w-full px-5 py-4 rounded-xl bg-black/20 border border-white/20 text-white placeholder-blue-200/50 
+                    focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:bg-black/30 transition-all duration-300 shadow-inner text-lg">
+                <div class="absolute inset-0 rounded-xl shimmer opacity-0 group-focus-within:opacity-100 pointer-events-none transition-opacity"></div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-4 pt-2">
+                <button onclick="proxyPlay()" class="group relative flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold py-4 px-6 rounded-xl shadow-lg transform transition-all active:scale-95 duration-200 overflow-hidden">
+                    <span class="relative z-10 flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        代理播放
+                    </span>
+                    <div class="absolute inset-0 h-full w-full bg-white/20 scale-x-0 group-hover:scale-x-100 transform origin-left transition-transform duration-300 ease-out"></div>
+                </button>
+
+                <button onclick="startDownload()" class="group relative flex-1 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 text-white font-bold py-4 px-6 rounded-xl shadow-lg transform transition-all active:scale-95 duration-200 overflow-hidden">
+                    <span class="relative z-10 flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        云端本地下载
+                    </span>
+                    <div class="absolute inset-0 h-full w-full bg-white/20 scale-x-0 group-hover:scale-x-100 transform origin-left transition-transform duration-300 ease-out"></div>
+                </button>
+            </div>
+            
+            <div id="statusContainer" class="hidden animate-fade-in-up mt-6 overflow-hidden rounded-xl glass border border-white/10">
+                <div class="bg-black/40 px-5 py-3 border-b border-white/5 flex items-center justify-between">
+                    <h3 class="text-cyan-300 font-semibold text-sm tracking-wider">执行回显</h3>
+                    <div class="flex gap-1.5">
+                        <div class="w-2.5 h-2.5 rounded-full bg-red-400"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-yellow-400"></div>
+                        <div class="w-2.5 h-2.5 rounded-full bg-green-400"></div>
+                    </div>
+                </div>
+                <div class="p-5 font-mono text-sm shadow-inner">
+                    <p id="statusMsg" class="text-green-300 break-words leading-relaxed whitespace-pre-wrap">Waiting for command...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 pt-6 border-t border-white/10 flex justify-center">
+            <a href="/local/" target="_blank" class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-300/50 text-blue-200 hover:text-white transition-all duration-300 font-medium group">
+                <svg class="w-5 h-5 text-cyan-400 group-hover:-translate-y-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                浏览已缓存的媒体库
+            </a>
+        </div>
+    </div>
+
+    <style>
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
+    </style>
+
+    <script>
+        function getUrl() { return document.getElementById('videoUrl').value.trim(); }
+        const statusContainer = document.getElementById('statusContainer');
+        const statusMsg = document.getElementById('statusMsg');
+
+        function printLog(msg, type = 'info') {
+            statusContainer.classList.remove('hidden');
+            let color = 'text-green-300';
+            if (type === 'error') color = 'text-red-400';
+            if (type === 'warn') color = 'text-yellow-300';
+            
+            statusMsg.className = "break-words leading-relaxed whitespace-pre-wrap " + color;
+            statusMsg.textContent = "> " + msg;
+        }
+
+        function proxyPlay() {
+            const url = getUrl();
+            if (!url) return printLog('错误：请先输入有效的视频 URL', 'error');
+            printLog('正在打开代理流播放器...');
+            window.open('/proxy?url=' + encodeURIComponent(url), '_blank');
+        }
+
+        async function startDownload() {
+            const url = getUrl();
+            if (!url) return printLog('错误：请先输入有效的视频 URL', 'error');
+            
+            printLog('正在发起后台下载请求...', 'warn');
+            
+            try {
+                const res = await fetch('/download?url=' + encodeURIComponent(url));
+                const data = await res.json().catch(() => null);
+                if(res.ok && data) {
+                    let log = '✅ 下载进程已启动！\n';
+                    log += '任务 ID: ' + data.task_id + '\n';
+                    log += '状态: ' + data.status + '\n';
+                    log += '您可以随后调用 API查询进度:\n/status?id=' + data.task_id;
+                    printLog(log, 'info');
+                } else {
+                    printLog('请求被拒绝: ' + (data?.error || "未知后端错误"), 'error');
+                }
+            } catch (err) {
+                printLog('致命错误: ' + err.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>`
