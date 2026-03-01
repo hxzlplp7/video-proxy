@@ -25,19 +25,40 @@ check_root() {
 install_app() {
     echo -e "${CBLUE}=> 正在安装 Video Proxy Server...${CEND}"
     
-    # Check if binary is present
-    if [ ! -f "./${BINARY_NAME}" ]; then
-        echo -e "${CRED}错误: 找不到当前目录下的 ${BINARY_NAME} 核心可执行文件。${CEND}"
-        echo -e "${CYELLOW}请先上传编译好的 ${BINARY_NAME} 到当前目录再执行此安装脚本。${CEND}"
-        exit 1
-    fi
+    # Check architecture
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        "x86_64"|"amd64")
+            BIN_ARCH="amd64"
+            ;;
+        "aarch64"|"arm64")
+            BIN_ARCH="arm64"
+            ;;
+        "armv7l"|"armv7")
+            BIN_ARCH="armv7"
+            ;;
+        *)
+            echo -e "${CRED}错误: 不支持的架构: $ARCH${CEND}"
+            exit 1
+            ;;
+    esac
 
-    # Create app directory
+    # Download latest release binary
+    GITHUB_REPO="hxzlplp7/video-proxy"
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/proxy-server-linux-${BIN_ARCH}"
+    
+    echo -e "${CYELLOW}正在下载适合 ${BIN_ARCH} 架构的二进制文件...${CEND}"
     mkdir -p ${APP_DIR}
     mkdir -p ${APP_DIR}/downloads
     
-    # Copy binary and make executable
-    cp ./${BINARY_NAME} ${APP_DIR}/
+    curl -L -o ${APP_DIR}/${BINARY_NAME} ${DOWNLOAD_URL}
+    
+    if [ ! -s "${APP_DIR}/${BINARY_NAME}" ] || grep -q "Not Found" "${APP_DIR}/${BINARY_NAME}"; then
+        echo -e "${CRED}错误: 下载失败。未能从 GitHub 获取二进制文件。${CEND}"
+        rm -f ${APP_DIR}/${BINARY_NAME}
+        exit 1
+    fi
+    
     chmod +x ${APP_DIR}/${BINARY_NAME}
 
     # Create Systemd service
