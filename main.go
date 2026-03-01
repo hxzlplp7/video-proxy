@@ -499,6 +499,7 @@ const indexHTML = `<!DOCTYPE html>
                 } else {
                     printLog('请求被拒绝: ' + (data?.error || text || "未知后端错误"), 'error');
                 }
+            } catch (err) {
                 printLog('致命错误: ' + err.message, 'error');
             }
         }
