@@ -16,7 +16,7 @@
 在任何可上网的 Linux 服务器终端上执行：
 
 ```bash
-curl -L -o install.sh https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh && sudo bash install.sh
+curl -L -o install.sh https://ghproxy.cn/https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh && sudo bash install.sh
 ```
 
 在弹出的菜单中输入 `1` 进行安装。安装后它将自动作为 Systemd 服务运行在默认的 `8000` 端口。

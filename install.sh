@@ -45,9 +45,11 @@ install_app() {
 
     # Download latest release binary
     GITHUB_REPO="hxzlplp7/video-proxy"
-    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/latest/download/proxy-server-linux-${BIN_ARCH}"
+    # Use a GitHub proxy to accelerate downloads in mainland China
+    GH_PROXY="https://ghproxy.cn/"
+    DOWNLOAD_URL="${GH_PROXY}https://github.com/${GITHUB_REPO}/releases/latest/download/proxy-server-linux-${BIN_ARCH}"
     
-    echo -e "${CYELLOW}正在下载适合 ${BIN_ARCH} 架构的二进制文件...${CEND}"
+    echo -e "${CYELLOW}正在从 GitHub (含中国大陆加速代理) 下载适合 ${BIN_ARCH} 架构的二进制文件...${CEND}"
     mkdir -p ${APP_DIR}
     mkdir -p ${APP_DIR}/downloads
     
