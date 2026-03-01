@@ -75,7 +75,10 @@ func handlePlayer(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Cleanly escape the URL for embedding in HTML string
 	safeURL := strings.ReplaceAll(urlParam, "'", "\\'")
-	w.Write([]byte(fmt.Sprintf(playerHTML, safeURL)))
+	// Use strings.Replace to inject the URL safely instead of fmt.Sprintf
+	// which can conflict with CSS percentage signs %
+	renderedHTML := strings.Replace(playerHTML, "URL_PLACEHOLDER", safeURL, 1)
+	w.Write([]byte(renderedHTML))
 }
 
 func handleProxy(w http.ResponseWriter, r *http.Request) {
@@ -523,14 +526,14 @@ const playerHTML = `<!DOCTYPE html>
             font-family: 'Inter', system-ui, sans-serif;
         }
         #video-container {
-            width: 100%%;
+            width: 100%;
             height: 100vh;
             max-width: 100vw;
             background: #000;
         }
         video {
-            width: 100%%;
-            height: 100%%;
+            width: 100%;
+            height: 100%;
             outline: none;
         }
     </style>
@@ -542,7 +545,7 @@ const playerHTML = `<!DOCTYPE html>
 
     <script>
         const video = document.getElementById('video');
-        const sourceUrl = '/proxy?url=' + encodeURIComponent('%s');
+        const sourceUrl = '/proxy?url=' + encodeURIComponent('URL_PLACEHOLDER');
 
         if (sourceUrl.includes('.m3u8') || sourceUrl.includes('.m3u')) {
             if (Hls.isSupported()) {
