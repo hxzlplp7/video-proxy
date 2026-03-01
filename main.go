@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
@@ -102,6 +103,9 @@ func proxyMediaFile(w http.ResponseWriter, r *http.Request, targetURL string) {
 
 	client := &http.Client{
 		Timeout: 0, // No timeout for media streaming
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
 
 	resp, err := client.Do(req)
@@ -123,7 +127,22 @@ func proxyMediaFile(w http.ResponseWriter, r *http.Request, targetURL string) {
 }
 
 func proxyM3U8(w http.ResponseWriter, r *http.Request, targetURLStr string) {
-	resp, err := http.Get(targetURLStr)
+	req, err := http.NewRequest(http.MethodGet, targetURLStr, nil)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to create m3u8 request: %v", err), http.StatusInternalServerError)
+		return
+	}
+	copyHeaders(req.Header, r.Header)
+	req.Header.Del("Host")
+
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to fetch m3u8: %v", err), http.StatusBadGateway)
 		return
@@ -243,7 +262,22 @@ func downloadFile(task *DownloadTask) {
 	}
 	defer out.Close()
 
-	resp, err := http.Get(task.URL)
+	req, err := http.NewRequest(http.MethodGet, task.URL, nil)
+	if err != nil {
+		updateTaskStatus(task.ID, "error", err.Error())
+		return
+	}
+	// Add a common User-Agent for downloads just in case
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	client := &http.Client{
+		Timeout: 0,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		updateTaskStatus(task.ID, "error", err.Error())
 		return
