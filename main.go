@@ -137,7 +137,8 @@ func proxyM3U8(w http.ResponseWriter, r *http.Request, targetURLStr string) {
 
 	hostURL := fmt.Sprintf("http://%s/proxy?url=", r.Host)
 
-	if listType == m3u8.MASTER {
+	switch listType {
+	case m3u8.MASTER:
 		masterpl := playlist.(*m3u8.MasterPlaylist)
 		for _, variant := range masterpl.Variants {
 			if variant != nil {
@@ -145,7 +146,7 @@ func proxyM3U8(w http.ResponseWriter, r *http.Request, targetURLStr string) {
 				variant.URI = hostURL + url.QueryEscape(variantURL.String())
 			}
 		}
-	} else if listType == m3u8.MEDIA {
+	case m3u8.MEDIA:
 		mediapl := playlist.(*m3u8.MediaPlaylist)
 		for _, segment := range mediapl.Segments {
 			if segment != nil {
