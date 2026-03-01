@@ -35,6 +35,7 @@ type DownloadTask struct {
 	Downloaded int64
 	Progress   string // e.g. "00:00:15"
 	Speed      string // e.g. "1.5x"
+	Threads    int    // Number of threads used
 }
 
 func init() {
@@ -275,9 +276,10 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	// Start background download
 	if isM3U8 {
+		task.Threads = 1 // FFmpeg handles internal threading
 		go downloadM3U8WithFFmpeg(task)
 	} else {
-		go downloadFile(task)
+		go downloadFileMultiThread(task)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -298,7 +300,8 @@ func downloadM3U8WithFFmpeg(task *DownloadTask) {
 
 	// ffmpeg -y -i "URL" -c copy -bsf:a aac_adtstoasc "output.mp4"
 	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-	cmd := exec.Command("ffmpeg", "-y", "-user_agent", ua, "-i", task.URL, "-c", "copy", "-bsf:a", "aac_adtstoasc", filePath)
+	// Added -reconnect and -user_agent before -i for better stability
+	cmd := exec.Command("ffmpeg", "-y", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-user_agent", ua, "-i", task.URL, "-c", "copy", "-bsf:a", "aac_adtstoasc", filePath)
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -360,8 +363,116 @@ func downloadM3U8WithFFmpeg(task *DownloadTask) {
 	log.Printf("[%s] M3U8 转码下载成功: %s", task.ID, task.Filename)
 }
 
-func downloadFile(task *DownloadTask) {
-	log.Printf("[%s] 开始文件下载: %s", task.ID, task.URL)
+func downloadFileMultiThread(task *DownloadTask) {
+	log.Printf("[%s] 开始多线程下载: %s", task.ID, task.URL)
+	filePath := filepath.Join(downloadDir, task.Filename)
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+	// 1. Get file size and check range support
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+	req, _ := http.NewRequest("HEAD", task.URL, nil)
+	req.Header.Set("User-Agent", ua)
+	resp, err := client.Do(req)
+	if err != nil {
+		updateTaskStatus(task.ID, "error", "HEAD request failed: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	contentLength := resp.ContentLength
+	acceptRanges := resp.Header.Get("Accept-Ranges") == "bytes" || resp.StatusCode == http.StatusPartialContent
+
+	// If no length or no range support, fall back to single thread
+	if contentLength <= 0 || !acceptRanges {
+		task.Threads = 1
+		downloadFileSingle(task)
+		return
+	}
+
+	// 2. Prepare multi-thread download
+	numThreads := 8
+	if contentLength < 1024*1024 { // Less than 1MB
+		numThreads = 1
+	}
+	task.Threads = numThreads
+
+	out, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		updateTaskStatus(task.ID, "error", "file creation failed: "+err.Error())
+		return
+	}
+	defer out.Close()
+	out.Truncate(contentLength)
+
+	var wg sync.WaitGroup
+	chunkSize := contentLength / int64(numThreads)
+	startTime := time.Now()
+
+	for i := 0; i < numThreads; i++ {
+		start := int64(i) * chunkSize
+		end := start + chunkSize - 1
+		if i == numThreads-1 {
+			end = contentLength - 1
+		}
+
+		wg.Add(1)
+		go func(threadID int, start, end int64) {
+			defer wg.Done()
+
+			backoff := 1 * time.Second
+			for retry := 0; retry < 3; retry++ {
+				tReq, _ := http.NewRequest("GET", task.URL, nil)
+				tReq.Header.Set("User-Agent", ua)
+				tReq.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+
+				tResp, tErr := client.Do(tReq)
+				if tErr != nil || tResp.StatusCode != http.StatusPartialContent {
+					time.Sleep(backoff)
+					backoff *= 2
+					continue
+				}
+				defer tResp.Body.Close()
+
+				buf := make([]byte, 32*1024)
+				currentPos := start
+				for {
+					n, rErr := tResp.Body.Read(buf)
+					if n > 0 {
+						out.WriteAt(buf[:n], currentPos)
+						currentPos += int64(n)
+						taskMutex.Lock()
+						task.Downloaded += int64(n)
+						// Update progress and speed
+						elapsed := time.Since(startTime).Seconds()
+						if elapsed > 0 {
+							bps := float64(task.Downloaded) / elapsed
+							task.Speed = fmt.Sprintf("%.2f MB/s", bps/1024/1024)
+						}
+						taskMutex.Unlock()
+					}
+					if rErr == io.EOF {
+						return
+					}
+					if rErr != nil {
+						break // Trigger retry
+					}
+				}
+			}
+		}(i, start, end)
+	}
+
+	wg.Wait()
+	updateTaskStatus(task.ID, "completed", "")
+	log.Printf("[%s] 多线程下载完成: %s", task.ID, task.Filename)
+}
+
+func downloadFileSingle(task *DownloadTask) {
+	log.Printf("[%s] 开始单线程下载 (由于服务器不支持 Range 或长度未知): %s", task.ID, task.URL)
 	filePath := filepath.Join(downloadDir, task.Filename)
 	out, err := os.Create(filePath)
 	if err != nil {
@@ -375,8 +486,8 @@ func downloadFile(task *DownloadTask) {
 		updateTaskStatus(task.ID, "error", err.Error())
 		return
 	}
-	// Add a common User-Agent for downloads just in case
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	req.Header.Set("User-Agent", ua)
 
 	client := &http.Client{
 		Timeout: 0,
@@ -397,7 +508,7 @@ func downloadFile(task *DownloadTask) {
 		return
 	}
 
-	// Copy body to file and track progress (basic)
+	startTime := time.Now()
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := resp.Body.Read(buf)
@@ -405,6 +516,11 @@ func downloadFile(task *DownloadTask) {
 			out.Write(buf[:n])
 			taskMutex.Lock()
 			task.Downloaded += int64(n)
+			elapsed := time.Since(startTime).Seconds()
+			if elapsed > 0 {
+				bps := float64(task.Downloaded) / elapsed
+				task.Speed = fmt.Sprintf("%.2f MB/s", bps/1024/1024)
+			}
 			taskMutex.Unlock()
 		}
 		if err == io.EOF {
@@ -449,8 +565,8 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if task.Status == "error" {
 		fmt.Fprintf(w, `{"id": "%s", "status": "%s", "error": "%s"}`, task.ID, task.Status, task.ErrorErr)
 	} else {
-		fmt.Fprintf(w, `{"id": "%s", "status": "%s", "downloaded_bytes": %d, "filename": "%s", "progress": "%s", "speed": "%s"}`,
-			task.ID, task.Status, task.Downloaded, task.Filename, task.Progress, task.Speed)
+		fmt.Fprintf(w, `{"id": "%s", "status": "%s", "downloaded_bytes": %d, "filename": "%s", "progress": "%s", "speed": "%s", "threads": %d}`,
+			task.ID, task.Status, task.Downloaded, task.Filename, task.Progress, task.Speed, task.Threads)
 	}
 }
 
@@ -618,9 +734,10 @@ const indexHTML = `<!DOCTYPE html>
                         printLog('❌ 出错了: ' + data.error, 'error');
                     } else {
                         let msg = '⏳ 当前状态: ' + data.status;
+                        if (data.threads) msg += '\n🧵 并发线程: ' + data.threads;
                         if (data.progress) msg += '\n🎬 已处理时长: ' + data.progress;
                         if (data.downloaded_bytes > 0) msg += '\n📦 已下载大小: ' + (data.downloaded_bytes / 1024 / 1024).toFixed(2) + ' MB';
-                        if (data.speed) msg += '\n🚀 转码速率: ' + data.speed;
+                        if (data.speed) msg += '\n🚀 下载速率: ' + data.speed;
                         printLog(msg, 'warn');
                     }
                 } catch (e) {
