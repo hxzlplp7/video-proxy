@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"flag"
@@ -32,6 +33,8 @@ type DownloadTask struct {
 	Filename   string
 	ErrorErr   string
 	Downloaded int64
+	Progress   string // e.g. "00:00:15"
+	Speed      string // e.g. "1.5x"
 }
 
 func init() {
@@ -293,13 +296,58 @@ func downloadM3U8WithFFmpeg(task *DownloadTask) {
 	}
 
 	// ffmpeg -y -i "URL" -c copy -bsf:a aac_adtstoasc "output.mp4"
-	// Using -user_agent to bypass some simple checks
 	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 	cmd := exec.Command("ffmpeg", "-y", "-user_agent", ua, "-i", task.URL, "-c", "copy", "-bsf:a", "aac_adtstoasc", filePath)
 
-	err = cmd.Run()
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		updateTaskStatus(task.ID, "error", fmt.Sprintf("ffmpeg error: %v", err))
+		updateTaskStatus(task.ID, "error", fmt.Sprintf("stderr pipe error: %v", err))
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		updateTaskStatus(task.ID, "error", fmt.Sprintf("ffmpeg start error: %v", err))
+		return
+	}
+
+	// Parse FFmpeg output for progress
+	scanner := bufio.NewScanner(stderr)
+	// FFmpeg uses \r to refresh status line, bufio.Scanner handles \n by default.
+	// We might need to split by \r or just wait for regular updates.
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Example line: frame=  123 fps=0.0 q=-1.0 size=    1536kB time=00:00:05.12 bitrate=2432.0kbits/s speed=5.12x
+		if strings.Contains(line, "size=") && strings.Contains(line, "time=") {
+			var sizeKB int64
+			var timeStr, speedStr string
+
+			// Manual parsing to avoid heavy regex
+			if idx := strings.Index(line, "size="); idx != -1 {
+				fmt.Sscanf(line[idx:], "size=%dkB", &sizeKB)
+			}
+			if idx := strings.Index(line, "time="); idx != -1 {
+				fmt.Sscanf(line[idx:], "time=%s", &timeStr)
+				if idxDot := strings.Index(timeStr, "."); idxDot != -1 {
+					timeStr = timeStr[:idxDot] // Remove milliseconds
+				}
+			}
+			if idx := strings.Index(line, "speed="); idx != -1 {
+				fmt.Sscanf(line[idx:], "speed=%s", &speedStr)
+			}
+
+			taskMutex.Lock()
+			if t, ok := downloadTasks[task.ID]; ok {
+				t.Downloaded = sizeKB * 1024
+				t.Progress = timeStr
+				t.Speed = speedStr
+			}
+			taskMutex.Unlock()
+		}
+	}
+
+	err = cmd.Wait()
+	if err != nil {
+		updateTaskStatus(task.ID, "error", fmt.Sprintf("ffmpeg wait error: %v", err))
 		return
 	}
 
@@ -393,7 +441,8 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if task.Status == "error" {
 		fmt.Fprintf(w, `{"id": "%s", "status": "%s", "error": "%s"}`, task.ID, task.Status, task.ErrorErr)
 	} else {
-		fmt.Fprintf(w, `{"id": "%s", "status": "%s", "downloaded_bytes": %d, "filename": "%s"}`, task.ID, task.Status, task.Downloaded, task.Filename)
+		fmt.Fprintf(w, `{"id": "%s", "status": "%s", "downloaded_bytes": %d, "filename": "%s", "progress": "%s", "speed": "%s"}`,
+			task.ID, task.Status, task.Downloaded, task.Filename, task.Progress, task.Speed)
 	}
 }
 
@@ -561,9 +610,9 @@ const indexHTML = `<!DOCTYPE html>
                         printLog('❌ 出错了: ' + data.error, 'error');
                     } else {
                         let msg = '⏳ 当前状态: ' + data.status;
-                        if (data.downloaded_bytes > 0) {
-                            msg += '\n已处理容量: ' + (data.downloaded_bytes / 1024 / 1024).toFixed(2) + ' MB';
-                        }
+                        if (data.progress) msg += '\n🎬 已处理时长: ' + data.progress;
+                        if (data.downloaded_bytes > 0) msg += '\n📦 已下载大小: ' + (data.downloaded_bytes / 1024 / 1024).toFixed(2) + ' MB';
+                        if (data.speed) msg += '\n🚀 转码速率: ' + data.speed;
                         printLog(msg, 'warn');
                     }
                 } catch (e) {
