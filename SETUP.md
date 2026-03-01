@@ -9,43 +9,39 @@
 
 ## 一、服务器端安装步骤 (Linux)
 
-### 方法 1：手动运行 (测试推荐)
+### 方法 1：使用一键脚本安装 (强烈推荐)
 
-1. 在服务器上创建一个目录，例如 `mkdir /opt/video-proxy && cd /opt/video-proxy`
-2. 将在此项目下编译好的 Linux 版本的单一可执行二进制文件（如 `proxy-server-linux`）上传到服务器并放置在该目录下。
-3. 赋予它运行权限：
+如果你希望该程序能在服务器**开机自启**并在后台稳定运行，我们提供了一个可以自动侦测架构并下载对应二进制程序的网络一键脚本。
+
+在任何可上网的 Linux 服务器终端上执行：
+
+```bash
+curl -L -o install.sh https://raw.githubusercontent.com/hxzlplp7/video-proxy/main/install.sh && sudo bash install.sh
+```
+
+在弹出的菜单中输入 `1` 进行安装。安装后它将自动作为 Systemd 服务运行在默认的 `8000` 端口。
+
+### 方法 2：手动运行 (二次开发或特定环境)
+
+1. 去本项目的 [Releases 页面](https://github.com/hxzlplp7/video-proxy/releases) 下载适合你的单一可执行二进制文件（如 `proxy-server-linux-amd64`）并上传到服务器。
+2. 赋予它运行权限：
 
    ```bash
-   chmod +x proxy-server-linux
+   chmod +x proxy-server-linux-amd64
    ```
 
-4. 直接运行测试：
+3. 直接运行测试：
 
    ```bash
-   ./proxy-server-linux
+   ./proxy-server-linux-amd64
    ```
 
    *此时你可以看到日志输出，按 `Ctrl+C` 退出。*
-5. 后台静默运行（如果不想设置开机启动）：
+4. 后台静默运行（如果不想设置开机启动）：
 
    ```bash
-   nohup ./proxy-server-linux > output.log 2>&1 &
+   nohup ./proxy-server-linux-amd64 > output.log 2>&1 &
    ```
-
-### 方法 2：使用提供的一键脚本安装 (生产环境推荐)
-
-如果你希望该程序能在服务器**开机自启**并在后台稳定运行，我们提供了一个一键安装脚本 `install.sh`。
-
-1. 确保您的二进制文件在这台主机上已重命名为 `proxy-server`。
-2. 将 `proxy-server` 和本目录下的 `install.sh` 一起上传到服务器的同一个目录。
-3. 在该目录下执行：
-
-   ```bash
-   chmod +x install.sh
-   sudo ./install.sh
-   ```
-
-4. 菜单中输入 `1` 进行安装。安装后它将自动作为 Systemd 服务运行在默认的 `8000` 端口。
 
 ## 二、功能接口调用参数
 
