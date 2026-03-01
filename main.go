@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -241,12 +242,19 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	filename := filepath.Base(parsedURL.Path)
 	if filename == "/" || filename == "." || filename == "" {
 		filename = fmt.Sprintf("download_%d.mp4", time.Now().Unix())
-	} else if strings.HasSuffix(filename, ".m3u8") {
-		// Download m3u8 to mp4 is complex purely in Go without ffmpeg.
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, `{"error": "该纯 Go 单文件版为了极致轻量化未内嵌 FFMPEG，目前暂不支持在后台直接将含有成百上千个 ts 分片的 M3U8 流媒体拼接下载为单个 MP4。对于 M3U8 请使用【代理播放】功能在线观看！"}`)
-		return
+	}
+
+	isM3U8 := strings.HasSuffix(strings.ToLower(parsedURL.Path), ".m3u8") || strings.HasSuffix(strings.ToLower(parsedURL.Path), ".m3u")
+	if isM3U8 {
+		if !strings.HasSuffix(strings.ToLower(filename), ".mp4") {
+			// Change extension to .mp4 for the transcoded output
+			ext := filepath.Ext(filename)
+			if ext != "" {
+				filename = strings.TrimSuffix(filename, ext) + ".mp4"
+			} else {
+				filename = filename + ".mp4"
+			}
+		}
 	}
 
 	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
@@ -263,10 +271,39 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	taskMutex.Unlock()
 
 	// Start background download
-	go downloadFile(task)
+	if isM3U8 {
+		go downloadM3U8WithFFmpeg(task)
+	} else {
+		go downloadFile(task)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"task_id": "%s", "status": "started", "message": "Download started in background"}`, taskID)
+	fmt.Fprintf(w, `{"task_id": "%s", "status": "started", "filename": "%s", "message": "Download started in background"}`, taskID, filename)
+}
+
+func downloadM3U8WithFFmpeg(task *DownloadTask) {
+	updateTaskStatus(task.ID, "transcoding", "")
+	filePath := filepath.Join(downloadDir, task.Filename)
+
+	// Check if ffmpeg exists
+	_, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		updateTaskStatus(task.ID, "error", "FFmpeg not found. Please install ffmpeg to download M3U8 streams.")
+		return
+	}
+
+	// ffmpeg -y -i "URL" -c copy -bsf:a aac_adtstoasc "output.mp4"
+	// Using -user_agent to bypass some simple checks
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	cmd := exec.Command("ffmpeg", "-y", "-user_agent", ua, "-i", task.URL, "-c", "copy", "-bsf:a", "aac_adtstoasc", filePath)
+
+	err = cmd.Run()
+	if err != nil {
+		updateTaskStatus(task.ID, "error", fmt.Sprintf("ffmpeg error: %v", err))
+		return
+	}
+
+	updateTaskStatus(task.ID, "completed", "")
 }
 
 func downloadFile(task *DownloadTask) {
@@ -437,8 +474,8 @@ const indexHTML = `<!DOCTYPE html>
                         <div class="w-2.5 h-2.5 rounded-full bg-green-400"></div>
                     </div>
                 </div>
-                <div class="p-5 font-mono text-sm shadow-inner">
-                    <p id="statusMsg" class="text-green-300 break-words leading-relaxed whitespace-pre-wrap">Waiting for command...</p>
+                <div class="p-5 font-mono text-sm shadow-inner min-h-[100px] flex flex-col justify-center">
+                    <div id="statusMsg" class="text-green-300 break-words leading-relaxed whitespace-pre-wrap text-center">Waiting for command...</div>
                 </div>
             </div>
         </div>
@@ -491,17 +528,48 @@ const indexHTML = `<!DOCTYPE html>
                 try { data = JSON.parse(text); } catch(e) {}
 
                 if(res.ok && data) {
-                    let log = '✅ 下载进程已启动！\n';
-                    log += '任务 ID: ' + data.task_id + '\n';
-                    log += '状态: ' + data.status + '\n';
-                    log += '您可以随后调用 API查询进度:\n/status?id=' + data.task_id;
-                    printLog(log, 'info');
+                    printLog('✅ 任务已创建！正在准备下载/转码...\n任务ID: ' + data.task_id, 'info');
+                    pollStatus(data.task_id);
                 } else {
                     printLog('请求被拒绝: ' + (data?.error || text || "未知后端错误"), 'error');
                 }
             } catch (err) {
                 printLog('致命错误: ' + err.message, 'error');
             }
+        }
+
+        async function pollStatus(taskId) {
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch('/status?id=' + taskId);
+                    const data = await res.json();
+                    
+                    if (data.status === 'completed') {
+                        clearInterval(interval);
+                        printLog('🎉 ' + (data.filename.endsWith('.mp4') ? '转码' : '下载') + '完成！\n文件名: ' + data.filename, 'info');
+                        
+                        // Create download link
+                        const btn = document.createElement('a');
+                        btn.href = '/local/' + data.filename;
+                        btn.target = '_blank';
+                        btn.className = 'mt-4 inline-flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white rounded-xl shadow-lg transition-all transform hover:-translate-y-1 font-bold mx-auto';
+                        btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 立即下载/播放 MP4';
+                        statusMsg.appendChild(document.createElement('br'));
+                        statusMsg.appendChild(btn);
+                    } else if (data.status === 'error') {
+                        clearInterval(interval);
+                        printLog('❌ 出错了: ' + data.error, 'error');
+                    } else {
+                        let msg = '⏳ 当前状态: ' + data.status;
+                        if (data.downloaded_bytes > 0) {
+                            msg += '\n已处理容量: ' + (data.downloaded_bytes / 1024 / 1024).toFixed(2) + ' MB';
+                        }
+                        printLog(msg, 'warn');
+                    }
+                } catch (e) {
+                    console.error('Polling failed', e);
+                }
+            }, 3000);
         }
     </script>
 </body>

@@ -21,6 +21,47 @@ check_root() {
     fi
 }
 
+check_ffmpeg() {
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+        echo -e "${CYELLOW}检测到系统中缺少 FFmpeg (用于 M3U8 转码下载)...${CEND}"
+        echo -e "${CBLUE}=> 正在尝试自动安装静态 FFmpeg...${CEND}"
+        
+        # Determine FFmpeg download URL based on architecture
+        FF_ARCH=""
+        case "$(uname -m)" in
+            "x86_64"|"amd64") FF_ARCH="linux64" ;;
+            "aarch64"|"arm64") FF_ARCH="linuxarm64" ;;
+            *) echo -e "${CYELLOW}无法为您的架构自动安装 FFmpeg，请手动安装。${CEND}"; return ;;
+        esac
+
+        FF_TMP="/tmp/ffmpeg_install"
+        mkdir -p $FF_TMP
+        
+        # Using BtbN/FFmpeg-Builds which is reliable and on GitHub (respects GH_PROXY)
+        FF_URL="${PROXY_PREFIX}https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-${FF_ARCH}-gpl.tar.xz"
+        
+        echo -e "${CYELLOW}正在从 ${FF_URL} 下载 FFmpeg...${CEND}"
+        if curl -L -f -o "$FF_TMP/ffmpeg.tar.xz" "$FF_URL"; then
+            echo -e "${CYELLOW}正在解压并安装 FFmpeg...${CEND}"
+            tar -xJf "$FF_TMP/ffmpeg.tar.xz" -C "$FF_TMP"
+            # Find the ffmpeg binary in the unpacked directory
+            FF_BIN=$(find "$FF_TMP" -name ffmpeg -type f | head -n 1)
+            if [ -f "$FF_BIN" ]; then
+                cp "$FF_BIN" /usr/local/bin/ffmpeg
+                chmod +x /usr/local/bin/ffmpeg
+                echo -e "${CGREEN}FFmpeg 安装成功!${CEND}"
+            else
+                echo -e "${CRED}错误: 解压后未找到 ffmpeg 二进制文件。${CEND}"
+            fi
+        else
+            echo -e "${CRED}错误: 下载 FFmpeg 失败。请尝试手动安装。${CEND}"
+        fi
+        rm -rf "$FF_TMP"
+    else
+        echo -e "${CGREEN}检测到系统已安装 FFmpeg。${CEND}"
+    fi
+}
+
 install_app() {
     echo -e "${CBLUE}=> 正在安装/更新 Video Proxy Server...${CEND}"
     
@@ -118,6 +159,9 @@ EOF
     systemctl daemon-reload
     systemctl enable ${SERVICE_NAME}
     systemctl start ${SERVICE_NAME}
+
+    # Check and install FFmpeg if needed
+    check_ffmpeg
 
     echo -e "${CGREEN}=> 安装成功!${CEND}"
     echo -e "代理服务已启动在后台运行，端口为: ${PORT}"
