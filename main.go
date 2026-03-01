@@ -227,9 +227,9 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		filename = fmt.Sprintf("download_%d.mp4", time.Now().Unix())
 	} else if strings.HasSuffix(filename, ".m3u8") {
 		// Download m3u8 to mp4 is complex purely in Go without ffmpeg.
-		// For simplicity in this single-binary version, we will just save the raw m3u8 stream content
-		// If it's just segments, it needs merging. We will return an error instructing to use standard links
-		http.Error(w, "Direct downloading of m3u8 without ffmpeg is not supported in the basic single-binary version. Please download raw mp4/flv files.", http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, `{"error": "该纯 Go 单文件版为了极致轻量化未内嵌 FFMPEG，目前暂不支持在后台直接将含有成百上千个 ts 分片的 M3U8 流媒体拼接下载为单个 MP4。对于 M3U8 请使用【代理播放】功能在线观看！"}`)
 		return
 	}
 
@@ -470,7 +470,10 @@ const indexHTML = `<!DOCTYPE html>
             
             try {
                 const res = await fetch('/download?url=' + encodeURIComponent(url));
-                const data = await res.json().catch(() => null);
+                const text = await res.text();
+                let data = null;
+                try { data = JSON.parse(text); } catch(e) {}
+
                 if(res.ok && data) {
                     let log = '✅ 下载进程已启动！\n';
                     log += '任务 ID: ' + data.task_id + '\n';
@@ -478,7 +481,7 @@ const indexHTML = `<!DOCTYPE html>
                     log += '您可以随后调用 API查询进度:\n/status?id=' + data.task_id;
                     printLog(log, 'info');
                 } else {
-                    printLog('请求被拒绝: ' + (data?.error || "未知后端错误"), 'error');
+                    printLog('请求被拒绝: ' + (data?.error || text || "未知后端错误"), 'error');
                 }
             } catch (err) {
                 printLog('致命错误: ' + err.message, 'error');
