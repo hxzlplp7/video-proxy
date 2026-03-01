@@ -24,27 +24,27 @@ jobs:
           
       - name: Build for Linux (amd64)
         run: |
-          GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o proxy-server-linux-amd64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o proxy-server-linux-amd64
           
       - name: Build for Linux (arm64)
         run: |
-          GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o proxy-server-linux-arm64
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-w -s" -o proxy-server-linux-arm64
           
       - name: Build for Linux (armv7)
         run: |
-          GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-w -s" -o proxy-server-linux-armv7
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags="-w -s" -o proxy-server-linux-armv7
           
       - name: Build for Windows (amd64)
         run: |
-          GOOS=windows GOARCH=amd64 go build -ldflags="-w -s" -o proxy-server-windows-amd64.exe
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-w -s" -o proxy-server-windows-amd64.exe
 
       - name: Build for Windows (arm64)
         run: |
-          GOOS=windows GOARCH=arm64 go build -ldflags="-w -s" -o proxy-server-windows-arm64.exe
+          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags="-w -s" -o proxy-server-windows-arm64.exe
           
       - name: Build for Windows (armv7)
         run: |
-          GOOS=windows GOARCH=arm GOARM=7 go build -ldflags="-w -s" -o proxy-server-windows-armv7.exe
+          CGO_ENABLED=0 GOOS=windows GOARCH=arm GOARM=7 go build -ldflags="-w -s" -o proxy-server-windows-armv7.exe
           
       - name: Release
         uses: softprops/action-gh-release@v1

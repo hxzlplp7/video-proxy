@@ -13,7 +13,6 @@ CBLUE="\033[1;36m"
 BINARY_NAME="proxy-server"
 APP_DIR="/opt/video-proxy"
 SERVICE_NAME="video-proxy"
-PORT="8000"
 
 check_root() {
     if [[ $EUID -ne 0 ]]; then
@@ -68,6 +67,10 @@ install_app() {
     
     chmod +x ${APP_DIR}/${BINARY_NAME}
 
+    # Ask for port
+    read -p "请输入要监听的端口 [默认 8000]: " PORT
+    PORT=${PORT:-8000}
+
     # Create Systemd service
     cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
 [Unit]
@@ -78,7 +81,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=${APP_DIR}
-ExecStart=${APP_DIR}/${BINARY_NAME}
+ExecStart=${APP_DIR}/${BINARY_NAME} -port ${PORT}
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
@@ -86,6 +89,10 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    # Create command shortcut
+    cp "$0" /usr/local/bin/video-proxy
+    chmod +x /usr/local/bin/video-proxy
 
     # Reload systemd and start service
     systemctl daemon-reload
@@ -100,6 +107,7 @@ EOF
     echo -e "  重启: ${CYELLOW}systemctl restart ${SERVICE_NAME}${CEND}"
     echo -e "  查看状态: ${CYELLOW}systemctl status ${SERVICE_NAME}${CEND}"
     echo -e "  查看日志: ${CYELLOW}journalctl -u ${SERVICE_NAME} -f${CEND}"
+    echo -e "  管理面板: 随时输入 ${CGREEN}video-proxy${CEND} 呼出此菜单"
 }
 
 uninstall_app() {
@@ -107,6 +115,7 @@ uninstall_app() {
     systemctl stop ${SERVICE_NAME} 2>/dev/null
     systemctl disable ${SERVICE_NAME} 2>/dev/null
     rm -f /etc/systemd/system/${SERVICE_NAME}.service
+    rm -f /usr/local/bin/video-proxy
     systemctl daemon-reload
     rm -rf ${APP_DIR}
     echo -e "${CGREEN}=> 卸载完成!${CEND}"

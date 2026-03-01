@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -41,14 +42,16 @@ func main() {
 	http.HandleFunc("/proxy", handleProxy)
 	http.HandleFunc("/download", handleDownload)
 	http.HandleFunc("/status", handleStatus)
-	
+
 	// Serve local files
 	fileServer := http.FileServer(http.Dir(downloadDir))
 	http.Handle("/local/", http.StripPrefix("/local/", fileServer))
 
-	port := "8000"
-	log.Printf("Starting Video Proxy Server on :%s\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	port := flag.String("port", "8000", "Port to run the proxy server on")
+	flag.Parse()
+
+	log.Printf("Starting Video Proxy Server on :%s\n", *port)
+	log.Fatal(http.ListenAndServe(":"+*port, nil))
 }
 
 func handleProxy(w http.ResponseWriter, r *http.Request) {
@@ -154,10 +157,10 @@ func proxyM3U8(w http.ResponseWriter, r *http.Request, targetURLStr string) {
 
 	// Set content type and return the modified M3U8 string
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-	
+
 	buf := new(bytes.Buffer)
 	buf.WriteString(playlist.Encode().String())
-	
+
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", buf.Len()))
 	w.WriteHeader(http.StatusOK)
 	w.Write(buf.Bytes())
@@ -194,14 +197,14 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		filename = fmt.Sprintf("download_%d.mp4", time.Now().Unix())
 	} else if strings.HasSuffix(filename, ".m3u8") {
 		// Download m3u8 to mp4 is complex purely in Go without ffmpeg.
-		// For simplicity in this single-binary version, we will just save the raw m3u8 stream content 
+		// For simplicity in this single-binary version, we will just save the raw m3u8 stream content
 		// If it's just segments, it needs merging. We will return an error instructing to use standard links
 		http.Error(w, "Direct downloading of m3u8 without ffmpeg is not supported in the basic single-binary version. Please download raw mp4/flv files.", http.StatusBadRequest)
 		return
 	}
 
 	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
-	
+
 	task := &DownloadTask{
 		ID:       taskID,
 		URL:      targetURLStr,
